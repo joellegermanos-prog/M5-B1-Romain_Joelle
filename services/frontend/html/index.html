@@ -105,7 +105,20 @@
   <option value="10+ years">10+ years</option>
 </select>
   <form id="scoreForm">
-    <!-- … champs à compléter … -->
+    <input name="loan_amnt" type="number" placeholder="Montant du prêt" required>
+    <input name="int_rate" type="number" placeholder="Taux d'intérêt" required>
+    <input name="installment" type="number" placeholder="Mensualité" required>
+    <input name="annual_inc" type="number" placeholder="Revenu annuel" required>
+    <input name="dti" type="number" placeholder="Ratio d'endettement" required>
+    <input name="delinq_2yrs" type="number" placeholder="Nombre de défauts sur 2 ans" required>
+    <input name="fico_range_low" type="number" placeholder="FICO score minimum" required>
+    <input name="revol_util" type="number" placeholder="Utilisation du crédit renouvelable" required>
+    <input name="term" type="text" placeholder="Durée du prêt" required>
+    <input name="grade" type="text" placeholder="Grade" required>
+    <input name="home_ownership" type="text" placeholder="Propriété du logement" required>
+    <input name="verification_status" type="text" placeholder="Statut de vérification" required>
+    <input name="purpose" type="text" placeholder="Objet du prêt" required>
+    <input name="emp_length" type="text" placeholder="Ancienneté professionnelle" required>
     <button type="submit">Évaluer le risque</button>
   </form>
 
@@ -118,8 +131,41 @@
       e.preventDefault();
       // TODO 2 — construire le payload JSON depuis le formulaire
       //   (penser à convertir les champs numériques en Number).
+      const formData = new FormData(form);
+      const payload = {
+        loan_amnt: Number(formData.get('loan_amnt')),
+        int_rate: Number(formData.get('int_rate')),
+        installment: Number(formData.get('installment')),
+        annual_inc: Number(formData.get('annual_inc')),
+        dti: Number(formData.get('dti')),
+        delinq_2yrs: Number(formData.get('delinq_2yrs')),
+        fico_range_low: Number(formData.get('fico_range_low')),
+        revol_util: Number(formData.get('revol_util')),
+        term: formData.get('term'),
+        grade: formData.get('grade'),
+        home_ownership: formData.get('home_ownership'),
+        verification_status: formData.get('verification_status'),
+        purpose: formData.get('purpose'),
+        emp_length: formData.get('emp_length')
+      };
       // TODO 3 — POST vers /api/score (même origine grâce au proxy nginx),
       //   afficher prediction + probability, gérer les erreurs.
+      try {
+        const response = await fetch('/api/score', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify(payload)
+        });
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        const data = await response.json();
+        result.textContent = `Prediction: ${data.prediction}, Probability: ${data.probability}`;
+      } catch (error) {
+        result.textContent = `Error: ${error.message}`;
+      }
     });
   </script>
 </body>
