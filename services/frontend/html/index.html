@@ -47,8 +47,41 @@
       e.preventDefault();
       // TODO 2 — construire le payload JSON depuis le formulaire
       //   (penser à convertir les champs numériques en Number).
+      const formData = new FormData(form);
+      const payload = {
+        loan_amnt: Number(formData.get('loan_amnt')),
+        int_rate: Number(formData.get('int_rate')),
+        installment: Number(formData.get('installment')),
+        annual_inc: Number(formData.get('annual_inc')),
+        dti: Number(formData.get('dti')),
+        delinq_2yrs: Number(formData.get('delinq_2yrs')),
+        fico_range_low: Number(formData.get('fico_range_low')),
+        revol_util: Number(formData.get('revol_util')),
+        term: formData.get('term'),
+        grade: formData.get('grade'),
+        home_ownership: formData.get('home_ownership'),
+        verification_status: formData.get('verification_status'),
+        purpose: formData.get('purpose'),
+        emp_length: formData.get('emp_length')
+      };
       // TODO 3 — POST vers /api/score (même origine grâce au proxy nginx),
       //   afficher prediction + probability, gérer les erreurs.
+      try {
+        const response = await fetch('/api/score', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify(payload)
+        });
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        const data = await response.json();
+        result.textContent = `Prediction: ${data.prediction}, Probability: ${data.probability}`;
+      } catch (error) {
+        result.textContent = `Error: ${error.message}`;
+      }
     });
   </script>
 </body>
