@@ -51,7 +51,7 @@ def test_model_contract_features_and_output():
 
     cols = meta["feature_columns_numeric"] + meta["feature_columns_categorical"]
     row = {
-        "loan_amnt": 10000.0, "int_rate": 13.5, "installment": 340.0,
+        "loan_mnt": 10000.0, "int_rate": 13.5, "installment": 340.0,
         "annual_inc": 55000.0, "dti": 18.2, "delinq_2yrs": 0,
         "fico_range_low": 690, "revol_util": 42.5, "term": "36 months",
         "grade": "B", "home_ownership": "MORTGAGE",
