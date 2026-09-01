@@ -21,7 +21,20 @@
        annual_inc, dti, delinq_2yrs, fico_range_low, revol_util (numériques)
        + term, grade, home_ownership, verification_status, purpose, emp_length. -->
   <form id="scoreForm">
-    <!-- … champs à compléter … -->
+    <input name="loan_amnt" type="number" placeholder="Montant du prêt" required>
+    <input name="int_rate" type="number" placeholder="Taux d'intérêt" required>
+    <input name="installment" type="number" placeholder="Mensualité" required>
+    <input name="annual_inc" type="number" placeholder="Revenu annuel" required>
+    <input name="dti" type="number" placeholder="Ratio d'endettement" required>
+    <input name="delinq_2yrs" type="number" placeholder="Nombre de défauts sur 2 ans" required>
+    <input name="fico_range_low" type="number" placeholder="FICO score minimum" required>
+    <input name="revol_util" type="number" placeholder="Utilisation du crédit renouvelable" required>
+    <input name="term" type="text" placeholder="Durée du prêt" required>
+    <input name="grade" type="text" placeholder="Grade" required>
+    <input name="home_ownership" type="text" placeholder="Propriété du logement" required>
+    <input name="verification_status" type="text" placeholder="Statut de vérification" required>
+    <input name="purpose" type="text" placeholder="Objet du prêt" required>
+    <input name="emp_length" type="text" placeholder="Ancienneté professionnelle" required>
     <button type="submit">Évaluer le risque</button>
   </form>
 
