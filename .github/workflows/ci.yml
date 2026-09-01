@@ -55,16 +55,40 @@ jobs:
   #     - name: Build the model
   #       run: python scripts/evaluate_model.py --release-tag ${{ github.ref }}
 
-  # TODO 2 — job `build-and-push` :
-  #   needs: [test, evaluate-model] ; if: push ; login GHCR ;
-  #   `docker compose build` ; tag + push de l'image model ; tag de release.
-  #
-  #   Deux pièges qui vous coûteront la fin de journée si vous les ignorez :
-  #   a) GHCR n'accepte QUE des noms d'image en **minuscules**. Votre repo
-  #      s'appelle `Formation-SIMPLON-IA/M5-B1-...` → passez le nom dans
-  #      `tr '[:upper:]' '[:lower:]'` avant le `docker tag`, sinon :
-  #      « invalid reference format: repository name must be lowercase ».
-  #   b) `docker compose images -q model` ne liste que les images des
-  #      conteneurs **créés**. Après un simple `docker compose build`, elle
-  #      renvoie une chaîne vide et le `docker tag` casse. Buildez l'image à
-  #      pousser avec `docker build -t "$IMG:$TAG" ./services/model`.
+  build-and-push:
+    needs: test
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Compute lowercase image name
+        run: |
+          REPO_LC=$(echo "${GITHUB_REPOSITORY}" | tr '[:upper:]' '[:lower:]')
+          echo "IMAGE_NAME=ghcr.io/${REPO_LC}/model" >> $GITHUB_ENV
+
+      - name: Build model image
+        run: |
+          docker build \
+            -t "${IMAGE_NAME}:${GITHUB_SHA}" \
+            -t "${IMAGE_NAME}:latest" \
+            -t "${IMAGE_NAME}:${GITHUB_REF_NAME}" \
+            ./services/model
+
+      - name: Push model image
+        run: |
+          docker push --all-tags "${IMAGE_NAME}"
