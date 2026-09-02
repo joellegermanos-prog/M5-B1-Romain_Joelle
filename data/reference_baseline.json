@@ -1,0 +1,9 @@
+{
+  "f1_macro": 0.6579,
+  "f1_default": 0.6627,
+  "roc_auc": 0.7014,
+  "recall_default": 0.672,
+  "model_version": "v2.0.0",
+  "reference_set": "data\\reference_set.csv",
+  "n_reference": 500
+}
