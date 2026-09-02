@@ -19,7 +19,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.middleware import LoggingMiddleware
 from app.schemas import HealthResponse, LoanApplication, Prediction
 
-from prometheus_client import Counter
+from prometheus_client import Counter, Histogram
 from prometheus_fastapi_instrumentator import Instrumentator
 
 
@@ -42,10 +42,30 @@ app.add_middleware(
 #   upstream lors de l'appel au model.
 # Expose /metrics (latence, RPS, codes retour) + métrique métier sur les
 # erreurs remontées par le service model lors de l'appel upstream.
+# Métriques métier custom
 MODEL_UPSTREAM_ERRORS_TOTAL = Counter(
     "backend_model_upstream_errors_total",
     "Nombre d'erreurs remontées par le service model lors d'un appel /score.",
+    labelnames=("kind",),
 )
+# Buckets fins sur la plage attendue (appel interne réseau, quelques ms à ~1s)
+# pour obtenir des p50/p95/p99 précis via histogram_quantile en Grafana.
+MODEL_CALL_DURATION_SECONDS = Histogram(
+    "backend_model_call_duration_seconds",
+    "Durée de l'appel HTTP interne vers le service model (hors traitement backend).",
+    buckets=(0.005, 0.01, 0.025, 0.05, 0.075, 0.1, 0.25, 0.5, 0.75, 1.0, 2.5, 5.0),
+)
+BACKEND_PREDICTIONS_TOTAL = Counter(
+    "backend_predictions_total",
+    "Décisions renvoyées au client, par classe prédite et version de modèle.",
+    labelnames=("predicted_class", "model_version"),
+)
+BACKEND_PREDICTION_PROBA = Histogram(
+    "backend_prediction_proba",
+    "Distribution des probabilités de défaut renvoyées au client (dérive du comportement du modèle).",
+    buckets=(0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0),
+)
+# Métriques HTTP automatiques + endpoint /metrics
 Instrumentator(should_group_status_codes=False).instrument(app).expose(
     app, endpoint="/metrics", include_in_schema=False
 )
@@ -75,20 +95,21 @@ async def score(application: LoanApplication, request: Request) -> Prediction:
 
     try:
         async with httpx.AsyncClient(timeout=10.0) as client:
-            response = await client.post(
-                f"{MODEL_URL.rstrip('/')}/predict",
-                json=application.model_dump(),
-                headers={"X-Request-ID": request_id},
-            )
-    except httpx.HTTPError as exc:  # type: ignore[assignment]
-        MODEL_UPSTREAM_ERRORS_TOTAL.inc()
+            with MODEL_CALL_DURATION_SECONDS.time():
+                response = await client.post(
+                    f"{MODEL_URL.rstrip('/')}/predict",
+                    json=application.model_dump(),
+                    headers={"X-Request-ID": request_id},
+                )
+    except httpx.RequestError as exc:
+        MODEL_UPSTREAM_ERRORS_TOTAL.labels(kind="unreachable").inc()
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Model service unavailable",
         ) from exc
 
     if response.status_code >= 400:
-        MODEL_UPSTREAM_ERRORS_TOTAL.inc()
+        MODEL_UPSTREAM_ERRORS_TOTAL.labels(kind="bad_status").inc()
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail=f"Model error {response.status_code}: {response.text[:200]}",
@@ -97,7 +118,7 @@ async def score(application: LoanApplication, request: Request) -> Prediction:
     try:
         payload = response.json()
     except ValueError as exc:  # pragma: no cover - protection défensive
-        MODEL_UPSTREAM_ERRORS_TOTAL.inc()
+        MODEL_UPSTREAM_ERRORS_TOTAL.labels(kind="invalid_json").inc()
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail="Invalid JSON returned by model",
@@ -106,10 +127,17 @@ async def score(application: LoanApplication, request: Request) -> Prediction:
     payload["request_id"] = request_id
 
     try:
-        return Prediction(**payload)
+        prediction = Prediction(**payload)
     except Exception as exc:  # noqa: BLE001
-        MODEL_UPSTREAM_ERRORS_TOTAL.inc()
+        MODEL_UPSTREAM_ERRORS_TOTAL.labels(kind="schema_mismatch").inc()
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail="Model response schema mismatch",
         ) from exc
+
+    BACKEND_PREDICTIONS_TOTAL.labels(
+        predicted_class=str(prediction.prediction),
+        model_version=prediction.model_version,
+    ).inc()
+    BACKEND_PREDICTION_PROBA.observe(prediction.probability)
+    return prediction
