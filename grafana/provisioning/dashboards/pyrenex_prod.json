@@ -1,7 +1,7 @@
 {
   "uid": "pyrenex-prod", "title": "Pyrenex Prod", "schemaVersion": 39,
   "panels": [{
-    "type": "stat", "title": "État du service",
+    "type": "stat", "title": "🔴 Service KO (model / backend)",
     "gridPos": {"h": 4, "w": 24, "x": 0, "y": 0},
     "datasource": {"type": "prometheus", "uid": "prometheus"},
     "fieldConfig": {
@@ -14,33 +14,70 @@
     },
     "targets": [{
       "datasource": {"type": "prometheus", "uid": "prometheus"},
-      "expr": "up{job=\"model\"}",
+      "expr": "up{job=~\"model|backend\"}",
       "legendFormat": "{{job}}"
     }]
   },
   {
-    "type": "timeseries", "title": "Vitesse — p50/p95/p99",
-    "gridPos": {"h": 8, "w": 24, "x": 0, "y": 4},
+    "type": "timeseries", "title": "🟠 Vitesse — p50/p95/p99 (model / backend)",
+    "gridPos": {"h": 8, "w": 24, "x": 0, "y": 8},
     "datasource": {"type": "prometheus", "uid": "prometheus"},
+    "fieldConfig": {
+      "defaults": {
+        "custom": {"thresholdsStyle": {"mode": "line"}},
+        "thresholds": {"mode": "absolute", "steps": [{"value": null, "color": "green"}, {"value": 0.5, "color": "red"}]}
+      }
+    },
     "targets": [{
       "datasource": {"type": "prometheus", "uid": "prometheus"},
-      "expr": "histogram_quantile(0.50, sum(rate(http_request_duration_seconds_bucket{job=\"model\"}[1m])) by (le))",
-      "legendFormat": "p50"
+      "expr": "histogram_quantile(0.50, sum(rate(http_request_duration_seconds_bucket{job=\"model\"}[5m])) by (le))",
+      "legendFormat": "model p50"
     },
     {
       "datasource": {"type": "prometheus", "uid": "prometheus"},
-      "expr": "histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket{job=\"model\"}[1m])) by (le))",
-      "legendFormat": "p95"
+      "expr": "histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket{job=\"model\"}[5m])) by (le))",
+      "legendFormat": "model p95"
     },
     {
       "datasource": {"type": "prometheus", "uid": "prometheus"},
-      "expr": "histogram_quantile(0.99, sum(rate(http_request_duration_seconds_bucket{job=\"model\"}[1m])) by (le))",
-      "legendFormat": "p99"
+      "expr": "histogram_quantile(0.99, sum(rate(http_request_duration_seconds_bucket{job=\"model\"}[5m])) by (le))",
+      "legendFormat": "model p99"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "expr": "histogram_quantile(0.50, sum(rate(http_request_duration_seconds_bucket{job=\"backend\"}[5m])) by (le))",
+      "legendFormat": "backend p50"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "expr": "histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket{job=\"backend\"}[5m])) by (le))",
+      "legendFormat": "backend p95"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "expr": "histogram_quantile(0.99, sum(rate(http_request_duration_seconds_bucket{job=\"backend\"}[5m])) by (le))",
+      "legendFormat": "backend p99"
     }]
   },
   {
-    "type": "timeseries", "title": "Vie — RPS par code de statut",
-    "gridPos": {"h": 8, "w": 24, "x": 0, "y": 12},
+    "type": "piechart", "title": "🟡 Comportement — Distribution des prédictions",
+    "gridPos": {"h": 8, "w": 24, "x": 0, "y": 16},
+    "datasource": {"type": "prometheus", "uid": "prometheus"},
+    "options": {"pieType": "donut", "displayLabels": ["name", "percent"]},
+    "targets": [{
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "expr": "sum(pyrenex_predictions_total{job=\"model\", predicted_class=\"0\"}) or vector(0)",
+      "legendFormat": "Classe 0"
+    },
+    {
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "expr": "sum(pyrenex_predictions_total{job=\"model\", predicted_class=\"1\"}) or vector(0)",
+      "legendFormat": "Classe 1"
+    }]
+  },
+  {
+    "type": "timeseries", "title": "Vie — RPS, erreurs et erreurs upstream par type",
+    "gridPos": {"h": 8, "w": 24, "x": 0, "y": 24},
     "datasource": {"type": "prometheus", "uid": "prometheus"},
     "targets": [{
       "datasource": {"type": "prometheus", "uid": "prometheus"},
@@ -51,54 +88,16 @@
       "datasource": {"type": "prometheus", "uid": "prometheus"},
       "expr": "sum(rate(http_requests_total{job=\"model\", status=~\"4..|5..\"}[1m])) or vector(0)",
       "legendFormat": "Erreurs/s"
-    }]
-  },
-  {
-    "type": "timeseries", "title": "Comportement — Qualité de distribution des classes",
-    "gridPos": {"h": 8, "w": 24, "x": 0, "y": 20},
-    "datasource": {"type": "prometheus", "uid": "prometheus"},
-    "targets": [{
-      "datasource": {"type": "prometheus", "uid": "prometheus"},
-      "expr": "sum(rate(pyrenex_predictions_total{job=\"model\", predicted_class=\"0\"}[5m])) or vector(0)",
-      "legendFormat": "Classe 0 (remboursé)"
     },
     {
       "datasource": {"type": "prometheus", "uid": "prometheus"},
-      "expr": "sum(rate(pyrenex_predictions_total{job=\"model\", predicted_class=\"1\"}[5m])) or vector(0)",
-      "legendFormat": "Classe 1 (défaut)"
-    }]
-  },
-  {
-    "type": "stat", "title": "État du service backend",
-    "gridPos": {"h": 4, "w": 24, "x": 0, "y": 28},
-    "datasource": {"type": "prometheus", "uid": "prometheus"},
-    "fieldConfig": {
-      "defaults": {
-        "mappings": [
-          {"type": "value", "options": {"0": {"text": "DOWN", "color": "red"}, "1": {"text": "UP", "color": "green"}}}
-        ],
-        "thresholds": {"mode": "absolute", "steps": [{"value": null, "color": "red"}, {"value": 1, "color": "green"}]}
-      }
-    },
-    "targets": [{
-      "datasource": {"type": "prometheus", "uid": "prometheus"},
-      "expr": "up{job=\"backend\"}",
-      "legendFormat": "{{job}}"
-    }]
-  },
-  {
-    "type": "timeseries", "title": "Vie — Erreurs upstream par type",
-    "gridPos": {"h": 8, "w": 24, "x": 0, "y": 32},
-    "datasource": {"type": "prometheus", "uid": "prometheus"},
-    "targets": [{
-      "datasource": {"type": "prometheus", "uid": "prometheus"},
       "expr": "sum(rate(backend_model_upstream_errors_total{job=\"backend\"}[5m])) by (kind) or vector(0)",
-      "legendFormat": "{{kind}}"
+      "legendFormat": "upstream: {{kind}}"
     }]
   },
   {
-    "type": "timeseries", "title": "Vitesse — appel interne backend→model (p50/p95/p99)",
-    "gridPos": {"h": 8, "w": 24, "x": 0, "y": 40},
+    "type": "timeseries", "title": "Vitesse (détail) — appel interne backend→model (p50/p95/p99)",
+    "gridPos": {"h": 8, "w": 24, "x": 0, "y": 32},
     "datasource": {"type": "prometheus", "uid": "prometheus"},
     "targets": [{
       "datasource": {"type": "prometheus", "uid": "prometheus"},
@@ -117,8 +116,8 @@
     }]
   },
   {
-    "type": "timeseries", "title": "Comportement — distribution de la probabilité de défaut",
-    "gridPos": {"h": 8, "w": 24, "x": 0, "y": 48},
+    "type": "timeseries", "title": "Comportement (détail) — distribution de la probabilité de défaut",
+    "gridPos": {"h": 8, "w": 24, "x": 0, "y": 40},
     "datasource": {"type": "prometheus", "uid": "prometheus"},
     "targets": [{
       "datasource": {"type": "prometheus", "uid": "prometheus"},
