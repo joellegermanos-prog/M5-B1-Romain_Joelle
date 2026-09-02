@@ -21,12 +21,21 @@ jobs:
       - name: Tests unitaires + contract test du modèle
         run: pytest -v services/model/tests
 
-  # TODO 1 (M5-B2) — job `evaluate-model` :
-  #   needs: test ; lance `python scripts/evaluate_model.py --release-tag <ref>`
-  #   qui DOIT bloquer (exit≠0) si une métrique passe sous les seuils.
-  #   Uploadez mlruns/ en artefact.
+  evaluation-tests:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install evaluation deps
+        run: pip install -r services/model/requirements.txt pytest mlflow pandas scikit-learn
+      - name: Tests d'évaluation du modèle (golden run + seuils)
+        run: pytest -v tests/test_evaluation.py
+
   evaluate-model:
-     needs: test
+     needs: evaluation-tests
      runs-on: ubuntu-latest
      steps:
        - uses: actions/checkout@v4

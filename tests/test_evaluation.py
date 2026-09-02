@@ -49,6 +49,24 @@ def test_thresholds_detect_degradation():
     violations = check_thresholds(metrics, baseline)
     assert len(violations) > 0
 
+def test_mlflow_params_are_loaded_from_model_metadata():
+    from scripts.evaluate_model import build_mlflow_params
+
+    meta = {
+        "model_version": "v2.0.0",
+        "dataset_sha256": "abc123",
+        "hyperparameters": {"n_estimators": 200, "max_depth": 10},
+        "target_column": "loan_status",
+    }
+
+    params = build_mlflow_params(meta, "v2.0.0", 512)
+
+    assert params["model_version"] == "v2.0.0"
+    assert params["dataset_sha256"] == "abc123"
+    assert params["hyperparameters.n_estimators"] == 200
+    assert params["hyperparameters.max_depth"] == 10
+    assert params["n_reference"] == 512
+
 def test_release_gate_blocks_on_violation():
     baseline = {
         "metrics": {

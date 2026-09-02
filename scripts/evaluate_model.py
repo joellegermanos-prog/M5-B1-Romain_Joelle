@@ -181,6 +181,24 @@ def load_reference_set() -> pd.DataFrame:
     return df
 
 
+def build_mlflow_params(meta: dict, release_tag: str, n_reference: int) -> dict:
+    """Construit les params MLflow à partir du JSON du modèle, pas à la main."""
+    params: dict[str, object] = {
+        "model_version": meta.get("model_version", "unknown"),
+        "release_tag": release_tag,
+        "reference_set": str(REFERENCE_SET.name),
+        "n_reference": int(n_reference),
+        "target_column": meta.get("target_column", "unknown"),
+        "dataset_sha256": meta.get("dataset_sha256", "unknown"),
+    }
+
+    hyperparams = meta.get("hyperparameters", {})
+    for key, value in hyperparams.items():
+        params[f"hyperparameters.{key}"] = value
+
+    return params
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--release-tag", default="dev")
@@ -209,18 +227,10 @@ def main() -> int:
     baseline = load_baseline()  # ← le golden run, PAS metrics_holdout
     violations = check_thresholds(metrics, baseline)
 
-    # --- Bloc MLflow PRÉ-CÂBLÉ — complétez params + metrics ------------------
+    # --- Bloc MLflow — params lus depuis le JSON du modèle ------------------
     mlflow.set_experiment("pyrenex-eval-continue")
     with mlflow.start_run(run_name=args.release_tag):
-        mlflow.log_params(
-            {
-                "model_version": meta["model_version"],
-                "release_tag": args.release_tag,
-                "reference_set": str(REFERENCE_SET.name),
-                "n_reference": len(df),
-                "target_column": meta["target_column"],
-            }
-        )
+        mlflow.log_params(build_mlflow_params(meta, args.release_tag, len(df)))
         mlflow.log_metrics(metrics)
         mlflow.set_tag("status", "failed" if violations else "passed")
         mlflow.set_tag("release_blocked", str(bool(violations)))
