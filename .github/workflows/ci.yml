@@ -121,6 +121,25 @@ jobs:
     if: ${{ failure() && needs.evaluate-model.result == 'failure' }}
     runs-on: ubuntu-latest
     steps:
+      - name: Validate Discord secret
+        env:
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+        run: |
+          if [ -z "$DISCORD_WEBHOOK_URL" ]; then
+            echo "Missing GitHub secret DISCORD_WEBHOOK_URL"
+            exit 1
+          fi
+
+          case "$DISCORD_WEBHOOK_URL" in
+            https://discord.com/api/webhooks/*|https://discordapp.com/api/webhooks/*)
+              echo "Discord webhook URL detected"
+              ;;
+            *)
+              echo "Invalid Discord webhook URL. Expected something like https://discord.com/api/webhooks/..."
+              exit 1
+              ;;
+          esac
+
       - name: Notify Discord on evaluation failure
         env:
           DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
