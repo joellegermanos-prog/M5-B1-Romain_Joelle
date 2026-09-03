@@ -35,17 +35,18 @@ jobs:
         run: pytest -v tests/test_evaluation.py
 
   evaluate-model:
-     needs: evaluation-tests
-     runs-on: ubuntu-latest
-     steps:
-       - uses: actions/checkout@v4
-       - uses: actions/setup-python@v5
-         with:
-           python-version: "3.11"
-       - name: Install eval deps
-         run: pip install -r services/model/requirements.txt mlflow pandas scikit-learn
-       - name: Évaluer le modèle vs seuils (golden run)
-         run: python scripts/evaluate_model.py --release-tag ${{ github.ref_name }}
+    needs: evaluation-tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install eval deps
+        run: pip install -r services/model/requirements.txt mlflow pandas scikit-learn
+      - name: Évaluer le modèle vs seuils (golden run)
+        # run: python scripts/evaluate_model.py --release-tag ${{ github.ref_name }} --degrade
+        run: python scripts/evaluate_model.py --release-tag ${{ github.ref_name }}
       - name: Ensure MLflow tracking directory exists
         if: always()
         run: |
@@ -53,11 +54,11 @@ jobs:
           ls -la
           ls -la mlruns || true
       - name: Upload mlruns (artefact de traçabilité)
-         if: always()
-         uses: actions/upload-artifact@v4
-         with:
-           name: mlruns-${{ github.run_id }}
-           path: mlruns/
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mlruns-${{ github.run_id }}
+          path: mlruns/
 
   build:
      needs: evaluate-model
