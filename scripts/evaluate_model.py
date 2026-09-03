@@ -32,6 +32,7 @@ from pathlib import Path
 
 import joblib
 import mlflow
+import numpy as np
 import pandas as pd
 from sklearn.metrics import f1_score, recall_score, roc_auc_score
 
@@ -77,8 +78,50 @@ def compute_metrics(model, df: pd.DataFrame, meta: dict) -> dict[str, float]:
     }
 
 
+def estimate_metric_std_bootstrap(model, df: pd.DataFrame, meta: dict, metric_name: str, n_bootstrap: int = 200, seed: int = 42) -> float:
+    """Estime le bruit de mesure sur une métrique via bootstrap non paramétrique.
+
+    On rééchantillonne le jeu de référence avec remise, on recalcule la métrique,
+    puis on prend l'écart type empirique de la distribution bootstrap. Le garde-fou
+    de release doit être au moins supérieur à 2σ pour rester au-dessus du bruit.
+    """
+    feature_columns = meta["feature_columns_numeric"] + meta["feature_columns_categorical"]
+    target_column = meta["target_column"]
+    target_mapping = meta["target_mapping"]
+    rng = np.random.default_rng(seed)
+    values: list[float] = []
+
+    for _ in range(n_bootstrap):
+        sample_idx = rng.integers(0, len(df), size=len(df))
+        sample = df.iloc[sample_idx].reset_index(drop=True)
+        X = sample[feature_columns]
+        y = sample[target_column].map(target_mapping)
+        preds = model.predict(X)
+        proba = model.predict_proba(X)[:, 1]
+
+        if metric_name == "f1_macro":
+            value = f1_score(y, preds, average="macro")
+        elif metric_name == "f1_default":
+            value = f1_score(y, preds, pos_label=1)
+        elif metric_name == "roc_auc":
+            value = roc_auc_score(y, proba)
+        elif metric_name == "recall_default":
+            value = recall_score(y, preds, pos_label=1)
+        else:
+            raise ValueError(f"Metric inconnue: {metric_name}")
+
+        values.append(float(value))
+
+    return float(np.std(values, ddof=1))
+
+
 def check_thresholds(metrics: dict[str, float], baseline: dict) -> list[str]:
-    """Retourne la liste des violations de seuil (vide = release OK)."""
+    """Retourne la liste des violations de seuil (vide = release OK).
+
+    Le seuil de baisse relative est au moins la tolérance métier et, si le bruit
+    mesuré par bootstrap est plus élevé, on remonte au moins à 2σ pour rester au-dessus
+    du bruit de mesure.
+    """
     # TODO 3 — comparer chaque métrique à son plancher absolu ET à la baisse
     #   max tolérée vs baseline. Retourner les messages de violation.
     violations = []
@@ -86,11 +129,18 @@ def check_thresholds(metrics: dict[str, float], baseline: dict) -> list[str]:
         value = metrics[name]
         if value < rule["absolute_min"]:
             violations.append(f"{name}={value} < plancher absolu {rule['absolute_min']}")
+
         baseline_value = baseline.get(name)
-        if baseline_value is not None and baseline_value - value > rule["max_drop_vs_baseline"]:
+        sigma = baseline.get(f"{name}_sigma")
+        effective_drop = rule["max_drop_vs_baseline"]
+        if sigma is not None:
+            effective_drop = max(effective_drop, 2.0 * float(sigma))
+
+        if baseline_value is not None and baseline_value - value > effective_drop:
+            sigma_text = f"; 2σ={2.0 * float(sigma):.4f}" if sigma is not None else ""
             violations.append(
-                f"{name}={value} a chuté de {baseline_value - value:.4f} "
-                f"(> {rule['max_drop_vs_baseline']} toléré vs golden run {baseline_value})"
+                f"{name}={value} a chute de {baseline_value - value:.4f} "
+                f"(> {effective_drop:.4f} tolere vs golden run {baseline_value}{sigma_text})"
             )
     return violations
 
@@ -116,8 +166,14 @@ def freeze_baseline(model, df: pd.DataFrame, meta: dict) -> dict:
     #   dans REFERENCE_BASELINE (avec model_version, reference_set,
     #   n_reference). Ce fichier est **versionné** : c'est lui qui arbitre les
     #   releases. À regeler seulement si le jeu OU le modèle de référence change.
+    metrics = compute_metrics(model, df, meta)
+    sigma_by_metric = {
+        metric_name: estimate_metric_std_bootstrap(model, df, meta, metric_name)
+        for metric_name in THRESHOLDS
+    }
     baseline = {
-        **compute_metrics(model, df, meta),
+        **metrics,
+        **{f"{metric_name}_sigma": round(value, 6) for metric_name, value in sigma_by_metric.items()},
         "model_version": meta["model_version"],
         "reference_set": str(REFERENCE_SET.relative_to(ROOT)),
         "n_reference": len(df),
@@ -185,6 +241,10 @@ def main() -> int:
 
     # --- Bloc MLflow PRÉ-CÂBLÉ — complétez params + metrics ------------------
     mlflow.set_experiment("pyrenex-eval-continue")
+    sigma_metrics = {
+        f"{metric_name}_sigma": float(baseline.get(f"{metric_name}_sigma", 0.0))
+        for metric_name in THRESHOLDS
+    }
     with mlflow.start_run(run_name=args.release_tag):
         mlflow.log_params(
             {
@@ -196,7 +256,7 @@ def main() -> int:
                 "degrade": args.degrade,
             }
         )
-        mlflow.log_metrics(metrics)  # ← les 4 métriques tracées
+        mlflow.log_metrics({**metrics, **sigma_metrics})
         mlflow.set_tag("release_blocked", str(bool(violations)))
     # ------------------------------------------------------------------------
 

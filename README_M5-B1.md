@@ -38,6 +38,48 @@ docker compose ps
 Accès une fois lancé : frontend [http://localhost:8088](http://localhost:8088),
 backend [http://localhost:8001](http://localhost:8001), model [http://localhost:8000](http://localhost:8000).
 
+## 🧪 Commandes utiles de validation et d’évaluation
+
+### Tests API / contrat du modèle
+
+```powershell
+# tests du service model
+python.exe -m pytest -q services/model/tests
+
+# tests du garde-fou d’évaluation continue
+python.exe -m pytest -q tests/test_evaluation.py
+```
+
+### Geler la baseline de référence (golden run)
+
+```powershell
+python.exe scripts/evaluate_model.py --freeze-baseline
+```
+
+### Évaluer une release
+
+```powershell
+python.exe scripts/evaluate_model.py --release-tag v2.0.0
+python.exe scripts/evaluate_model.py --release-tag test
+```
+
+### Simuler une regression pour tester le blocage
+
+```powershell
+python.exe scripts/evaluate_model.py --release-tag bad --degrade
+```
+
+> Le script doit sortir en code non nul si les seuils sont violés. C’est ce comportement qui bloque la release dans GitHub Actions.
+
+### Comparer les runs MLflow
+
+```powershell
+mlflow.exe ui
+```
+
+Puis ouvrir <http://localhost:5000> pour voir les métriques et comparer les runs de validation continue.
+![alt text](image-1.png)
+
 ## 📦 Image sur GHCR
 
 Image `model` publiée sur GitHub Container Registry :
