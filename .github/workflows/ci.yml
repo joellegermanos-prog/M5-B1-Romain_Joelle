@@ -61,16 +61,21 @@ jobs:
           path: mlruns/
 
   build:
-     needs: evaluate-model
-     if: github.event_name == 'push'
-     runs-on: ubuntu-latest
-     steps:
-       - uses: actions/checkout@v4
-       - uses: actions/setup-python@v5
-         with:
-           python-version: "3.11"
-       - name: Build the model
-         run: python scripts/evaluate_model.py --release-tag ${{ github.ref }}
+    needs: evaluate-model
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Package model artifact
+        run: |
+          mkdir -p dist
+          cp -r services/model dist/
+          tar -czf model-package-${{ github.sha }}.tgz dist
+      - name: Upload packaged artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: model-package-${{ github.sha }}
+          path: model-package-${{ github.sha }}.tgz
 
   build-and-push:
     needs: evaluate-model
