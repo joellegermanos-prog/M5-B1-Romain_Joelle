@@ -60,25 +60,26 @@ jobs:
           name: mlruns-${{ github.run_id }}
           path: mlruns/
 
-  build:
-    needs: evaluate-model
-    if: github.event_name == 'push'
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - name: Package model artifact
-        run: |
-          mkdir -p dist
-          cp -r services/model dist/
-          tar -czf model-package-${{ github.sha }}.tgz dist
-      - name: Upload packaged artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: model-package-${{ github.sha }}
-          path: model-package-${{ github.sha }}.tgz
+  ###### optional #######
+  #build:
+  #  needs: evaluate-model
+  #  if: github.event_name == 'push'
+  #  runs-on: ubuntu-latest
+  #  steps:
+  #    - uses: actions/checkout@v4
+  #    - name: Package model artifact
+  #      run: |
+  #        mkdir -p dist
+  #        cp -r services/model dist/
+  #        tar -czf model-package-${{ github.sha }}.tgz dist
+  #    - name: Upload packaged artifact
+  #      uses: actions/upload-artifact@v4
+  #      with:
+  #        name: model-package-${{ github.sha }}
+  #        path: model-package-${{ github.sha }}.tgz
 
   build-and-push:
-    needs: build
+    needs: evaluate-model
     if: github.event_name == 'push'
     runs-on: ubuntu-latest
     permissions:
