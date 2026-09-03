@@ -60,7 +60,7 @@ jobs:
           name: mlruns-${{ github.run_id }}
           path: mlruns/
 
-  ####### optional #######
+  ####### optional ########
   #build:
   #  needs: evaluate-model
   #  if: github.event_name == 'push'
