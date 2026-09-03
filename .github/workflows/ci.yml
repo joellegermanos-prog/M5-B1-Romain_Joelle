@@ -115,3 +115,32 @@ jobs:
       - name: Push model image
         run: |
           docker push --all-tags "${IMAGE_NAME}"
+
+  notify-failure:
+    needs: evaluate-model
+    if: ${{ failure() && needs.evaluate-model.result == 'failure' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Notify Discord on evaluation failure
+        env:
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+        run: |
+          curl -sS -X POST "$DISCORD_WEBHOOK_URL" \
+            -H "Content-Type: application/json" \
+            --data @- <<JSON
+          {
+            "username": "Model Gate",
+            "embeds": [
+              {
+                "title": "🚨 Release blocked by evaluation gate",
+                "description": "The model evaluation failed for this repository.",
+                "color": 15158332,
+                "fields": [
+                  { "name": "Repository", "value": "${{ github.repository }}", "inline": true },
+                  { "name": "Branch", "value": "${{ github.ref_name }}", "inline": true },
+                  { "name": "Run", "value": "[Open run](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})", "inline": false }
+                ]
+              }
+            ]
+          }
+          JSON
