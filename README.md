@@ -92,7 +92,125 @@ Vous repartez **chacun·e** du repo binôme, dans une branche perso
 
 ---
 
-## 🚀 Démarrage (le service `model` tourne déjà)
+## � Évaluation continue (golden run + seuils + MLflow)
+
+La validation continue du modèle ne compare plus le modèle courant à un holdout aléatoire différent. Le principe est stable et reproductible :
+
+- on construit un jeu de référence figé à partir du holdout M1,
+- on calcule un `golden run` qui sert de référence autorisée,
+- chaque nouveau run est évalué sur le même jeu de référence,
+- la release est bloquée si une métrique dégrade trop ou si le seuil absolu est franchi.
+
+### 1) Jeu de référence et golden run
+
+- `data/reference_set.csv` : jeu de référence figé (~500 lignes), versionné dans le dépôt.
+- `data/reference_baseline.json` : snapshot du golden run (métriques et paramètres de référence).
+
+Le script de gel est déclenché ainsi :
+
+```bash
+python scripts/evaluate_model.py --freeze-baseline
+```
+
+Le golden run est le point d'ancrage de la release gate. Il ne doit pas être recalculé à la légère : il représente la performance acceptable de référence.
+
+### 2) Script d'évaluation
+
+Le cœur du gate est dans `scripts/evaluate_model.py`.
+
+Il calcule au minimum :
+
+- précision / accuracy,
+- roc_auc ou métrique métier ciblée,
+- f1-score ou score de décision,
+- métriques de stabilité / qualité du score (selon la définition de votre projet).
+
+Le script vérifie ensuite :
+
+- le seuil absolu de chaque métrique,
+- la baisse relative par rapport au golden run,
+- les cas de régression trop importantes.
+
+En cas de défaillance, le script renvoie un code de sortie non nul et la CI est bloquée.
+
+### 3) MLflow tracking
+
+Chaque run est injecté dans MLflow avec :
+
+- paramètres d'inférence / versionnement,
+- métriques de validation,
+- labels de run pour comparaison,
+- artefacts de traçabilité si nécessaire.
+
+Pour visualiser les runs locaux :
+
+```bash
+mlflow ui
+```
+
+Puis ouvrir : http://localhost:5000
+
+L'UI permet de comparer les performances entre runs, d'identifier la régression et de justifier la décision de blocage ou de validation.
+
+### 4) CI / release gate
+
+Le workflow GitHub Actions contient un job bloquant :
+
+```yaml
+evaluate-model:
+  needs: evaluation-tests
+  runs-on: ubuntu-latest
+```
+
+Le job exécute :
+
+```bash
+python scripts/evaluate_model.py --release-tag ${{ github.ref_name }}
+```
+
+Si l'évaluation est rouge, la release est stoppée avant publication de l'image Docker.
+
+Le mode `--degrade` est réservé aux tests de preuve rouge :
+
+```bash
+python scripts/evaluate_model.py --release-tag ${{ github.ref_name }} --degrade
+```
+
+Il permet de simuler volontairement une régression afin de valider l'alerte sans modifier la logique de production.
+
+### 5) Alerte Discord
+
+Le workflow peut aussi envoyer une alerte Discord en cas d'échec de la gate evaluation.
+
+Le secret GitHub attendu est :
+
+```text
+DISCORD_WEBHOOK_URL
+```
+
+avec une valeur de type :
+
+```text
+https://discord.com/api/webhooks/....
+```
+
+Le notifier ne se déclenche que si le job `evaluate-model` échoue. Il ne faut pas utiliser un lien de salon `discord.com/channels/...` ; il faut bien un webhook Discord.
+
+### 6) Règle de décision
+
+Une release est validée si et seulement si :
+
+- les tests unitaires passent,
+- le golden run est bien utilisé comme référence,
+- les métriques restent au-dessus des seuils définis,
+- le run MLflow est tracé et comparable,
+- la CI n'est pas bloquée par une régression.
+
+Cette logique garantit une politique de validation explicite et reproductible, sans dépendre du hasard d'un jeu différent à chaque run.
+
+---
+
+## �🚀 Démarrage (le service `model` tourne déjà)
 
 ```bash
 # 1. Environnement de tests local (optionnel mais conseillé)
