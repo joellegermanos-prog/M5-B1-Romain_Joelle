@@ -78,7 +78,7 @@ jobs:
           path: model-package-${{ github.sha }}.tgz
 
   build-and-push:
-    needs: evaluate-model
+    needs: build
     if: github.event_name == 'push'
     runs-on: ubuntu-latest
     permissions:
